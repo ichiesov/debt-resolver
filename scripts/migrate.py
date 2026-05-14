@@ -1,6 +1,9 @@
 """
 Apply SQL migrations to the Supabase project.
 
+Tracks applied migrations in a `schema_migrations` table.
+Already-applied migrations are skipped automatically.
+
 Requires SUPABASE_ACCESS_TOKEN in .env — a Personal Access Token from:
   https://supabase.com/dashboard/account/tokens
 
@@ -24,6 +27,17 @@ SUPABASE_ACCESS_TOKEN = os.getenv("SUPABASE_ACCESS_TOKEN", "")
 
 MIGRATIONS_DIR = Path(__file__).parent.parent / "app" / "db" / "migrations"
 
+CREATE_MIGRATIONS_TABLE = """
+create table if not exists schema_migrations (
+    filename text primary key,
+    applied_at timestamptz not null default now()
+);
+"""
+
+GET_APPLIED = "select filename from schema_migrations order by filename;"
+
+MARK_APPLIED = "insert into schema_migrations (filename) values ('{filename}') on conflict do nothing;"
+
 
 def get_project_ref(url: str) -> str:
     match = re.match(r"https://([^.]+)\.supabase\.co", url)
@@ -33,8 +47,7 @@ def get_project_ref(url: str) -> str:
 
 
 def split_statements(sql: str) -> list[str]:
-    """Split SQL into individual statements, skipping empty ones."""
-    statements = []
+    statements: list[str] = []
     current: list[str] = []
     in_dollar_quote = False
 
@@ -54,13 +67,26 @@ def split_statements(sql: str) -> list[str]:
     return statements
 
 
-async def execute_sql(client: httpx.AsyncClient, project_ref: str, sql: str) -> None:
+ALREADY_EXISTS_ERRORS = (
+    "already exists",
+    "duplicate key value",
+)
+
+
+async def query(
+    client: httpx.AsyncClient, project_ref: str, sql: str, ignore_exists: bool = False
+) -> list[dict]:
     response = await client.post(
         f"https://api.supabase.com/v1/projects/{project_ref}/database/query",
         json={"query": sql},
     )
     if response.status_code not in (200, 201):
-        raise RuntimeError(f"SQL failed ({response.status_code}): {response.text}\n\nSQL:\n{sql[:300]}")
+        if ignore_exists and any(e in response.text for e in ALREADY_EXISTS_ERRORS):
+            return []
+        raise RuntimeError(
+            f"SQL failed ({response.status_code}): {response.text}\n\nSQL:\n{sql[:300]}"
+        )
+    return response.json() if response.text else []
 
 
 async def run_migrations() -> None:
@@ -86,7 +112,18 @@ async def run_migrations() -> None:
         headers={"Authorization": f"Bearer {SUPABASE_ACCESS_TOKEN}"},
         timeout=30,
     ) as client:
-        for path in migration_files:
+        await query(client, project_ref, CREATE_MIGRATIONS_TABLE)
+
+        rows = await query(client, project_ref, GET_APPLIED)
+        applied = {row["filename"] for row in rows}
+
+        pending = [f for f in migration_files if f.name not in applied]
+
+        if not pending:
+            print("✅ Все миграции уже применены.")
+            return
+
+        for path in pending:
             sql = path.read_text()
             statements = split_statements(sql)
             print(f"\n📄 {path.name} ({len(statements)} statements)")
@@ -94,11 +131,12 @@ async def run_migrations() -> None:
             for i, stmt in enumerate(statements, 1):
                 preview = stmt.splitlines()[0][:60]
                 print(f"  [{i}/{len(statements)}] {preview}...")
-                await execute_sql(client, project_ref, stmt)
+                await query(client, project_ref, stmt, ignore_exists=True)
 
+            await query(client, project_ref, MARK_APPLIED.format(filename=path.name))
             print(f"  ✅ {path.name} применён")
 
-    print("\n✅ Все миграции применены успешно!")
+    print("\n✅ Готово!")
 
 
 if __name__ == "__main__":
