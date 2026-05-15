@@ -1,0 +1,17 @@
+services:
+  bot:
+    image: ghcr.io/ichiesov/debt-resolver-bot:latest
+    restart: unless-stopped
+    env_file: /opt/debt-resolver/.env
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  web:
+    image: ghcr.io/ichiesov/debt-resolver-web:latest
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    profiles: ["web"]

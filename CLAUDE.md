@@ -110,6 +110,51 @@ uv run python main.py
 
 ---
 
+## Docker & Деплой
+
+### Образы
+
+| Сервис | Образ | Dockerfile |
+|---|---|---|
+| `bot` | `ghcr.io/ichiesov/debt-resolver-bot:latest` | `docker/bot/Dockerfile` |
+| `web` | `ghcr.io/ichiesov/debt-resolver-web:latest` | `docker/web/Dockerfile` |
+
+### Локальная разработка
+
+```bash
+docker compose up --build
+```
+
+### CI/CD (deploy.yml)
+
+Запускается на push в `master`. Определяет изменения через `dorny/paths-filter`:
+
+| Фильтр | Пути |
+|---|---|
+| `bot` | `app/**, main.py, pyproject.toml, uv.lock, docker/bot/**` |
+| `web` | `web/**, docker/web/**` |
+
+Пересобирает и деплоит **только изменившиеся** сервисы. Образы пушатся в `ghcr.io`, деплой через SSH на VPS с `docker compose up -d --no-deps <service>`.
+
+### Секреты для деплоя
+
+| Secret | Описание |
+|---|---|
+| `VPS_HOST` | IP или hostname VPS |
+| `VPS_USER` | SSH пользователь (root / ubuntu) |
+| `VPS_SSH_KEY` | Приватный SSH ключ (ed25519 или RSA) |
+
+### Настройка VPS (один раз)
+
+```bash
+curl -fsSL https://get.docker.com | sh
+mkdir -p /opt/debt-resolver
+# Создать /opt/debt-resolver/.env из .env.example
+docker login ghcr.io -u <github-username> -p <PAT>
+```
+
+---
+
 ## MCP Servers
 
 | Server | Purpose | URL |
