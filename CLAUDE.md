@@ -63,6 +63,53 @@ uv run python main.py
 
 ---
 
+## Обязательный процесс разработки (Feature Workflow)
+
+**Каждая фича разрабатывается в отдельной ветке и проходит через PR.**
+
+### Шаги
+
+```
+1. Создать ветку от master
+   git checkout master && git pull origin master
+   git checkout -b feature/<название>
+
+2. Разрабатывать, коммитить в feature-ветку
+   git commit -m "feat: ..."
+   git push origin feature/<название>
+
+3. Создать PR в GitHub (base: master)
+   gh pr create --base master --title "..." --body "..."
+
+4. GitHub Actions автоматически:
+   a. Запускает code-review агента (Claude) → оставляет комментарии в PR
+   b. Если запрошены изменения → apply-review агент вносит их в ветку
+   c. После апрува (человеком) → PR автоматически вливается в master
+```
+
+### GitHub Actions workflows
+
+| Workflow | Триггер | Действие |
+|---|---|---|
+| `code-review.yml` | PR открыт / обновлён | Claude code review agent → комментарии и review в PR |
+| `apply-review.yml` | Review с `REQUEST_CHANGES` | Claude apply agent → вносит изменения и коммитит в ветку |
+| `auto-merge.yml` | Review с `APPROVED` | Автоматически вливает PR в master |
+
+### Правила
+
+- **Нельзя** коммитить напрямую в `master`
+- PR без прохождения code review агента не мержится
+- Человек может апрувить PR даже если агент запросил изменения
+- После апрува ветка удаляется автоматически
+
+### Необходимые секреты в GitHub
+
+| Secret | Где взять |
+|---|---|
+| `ANTHROPIC_API_KEY` | console.anthropic.com → API Keys |
+
+---
+
 ## MCP Servers
 
 | Server | Purpose | URL |

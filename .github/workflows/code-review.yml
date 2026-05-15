@@ -1,0 +1,49 @@
+name: Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [master]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          direct_prompt: |
+            You are a senior code reviewer for the **debt-resolver** project.
+
+            ## Project context
+            - Python 3.12, aiogram 3.x Telegram bot, Supabase (PostgreSQL)
+            - Architecture: domain layer (pure functions) → repositories → services → bot handlers
+            - All monetary values must use `decimal.Decimal`, never `float`
+            - All Supabase calls must be async
+            - mypy strict mode, ruff linting (line-length=100)
+            - Tests: pytest + pytest-asyncio + freezegun
+
+            ## Your task
+            Review this pull request thoroughly. Check for:
+            1. **Correctness** — logic errors, edge cases, incorrect calculations
+            2. **Type safety** — missing type hints, mypy violations
+            3. **Security** — exposed secrets, SQL injection, unvalidated input
+            4. **Architecture** — domain layer must have zero I/O, repos must scope by user_id
+            5. **Code style** — ruff compliance, no unnecessary comments, no float for money
+            6. **Tests** — are new functions covered by tests?
+
+            Submit a formal GitHub review:
+            - **APPROVE** if the code is ready to merge
+            - **REQUEST_CHANGES** if there are blocking issues (list them clearly as inline comments)
+            - **COMMENT** for non-blocking suggestions
+
+            Leave inline comments on specific lines. Be concise and actionable.

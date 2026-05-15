@@ -1,0 +1,42 @@
+name: Apply Review Changes
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  apply:
+    # Run only when changes are explicitly requested (not on approve or plain comment)
+    if: github.event.review.state == 'changes_requested'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          direct_prompt: |
+            A code review was submitted on this pull request requesting changes.
+
+            ## Your task
+            1. Read ALL review comments carefully (both the summary review body and inline comments on specific lines)
+            2. Implement every requested change
+            3. Do not change anything that was not requested
+            4. After applying all changes, commit them to this branch with a clear message
+
+            ## Project rules (must follow when editing code)
+            - `decimal.Decimal` for all monetary values, never `float`
+            - All Supabase calls must be `async def`
+            - Type hints on every function (mypy strict)
+            - ruff formatting, line-length=100
+            - No comments unless explaining a non-obvious invariant
+
+            Commit message format: `fix: apply review changes from PR #${{ github.event.pull_request.number }}`
