@@ -149,15 +149,22 @@ async def seed(note_path: Path, *, force: bool) -> None:
     loan_repo = LoanRepository(client, user_id)
 
     existing = await loan_repo.get_all_active()
-    if existing:
-        print(f"\n⚠️  В базе уже есть {len(existing)} активных кредитов.")
-        if not force:
-            answer = input("Продолжить и добавить поверх? [y/N] ").strip().lower()
-            if answer not in ("y", "yes", "да"):
-                print("Отменено.")
-                return
+    existing_keys = {
+        (loan.lender_name, loan.principal_amount, loan.start_date) for loan in existing
+    }
 
-    for data in loans:
+    to_insert = [
+        d for d in loans
+        if (d["lender_name"], d["principal_amount"], d["start_date"]) not in existing_keys
+    ]
+    skipped = len(loans) - len(to_insert)
+    if skipped:
+        print(f"\n⏭  Пропущено {skipped} уже существующих кредитов.")
+    if not to_insert:
+        print("✅ Все кредиты уже в базе.")
+        return
+
+    for data in to_insert:
         loan = await loan_repo.create(
             lender_name=data["lender_name"],
             principal_amount=data["principal_amount"],
