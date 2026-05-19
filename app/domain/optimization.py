@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -25,11 +26,17 @@ def _monthly_interest(loan: Loan) -> Decimal:
 def _months_to_payoff(loan: Loan) -> int:
     if loan.current_balance <= Decimal("0"):
         return 0
-    principal_per_month = loan.monthly_payment - _monthly_interest(loan)
-    if principal_per_month <= Decimal("0"):
+    r = float(loan.annual_interest_rate) / 12
+    b = float(loan.current_balance)
+    m = float(loan.monthly_payment)
+    if r == 0:
+        return math.ceil(b / m)
+    # Compound-interest annuity formula: n = -ln(1 - r*B/M) / ln(1+r)
+    ratio = r * b / m
+    if ratio >= 1:
+        # Payment doesn't cover monthly interest — loan never pays off
         return 9999
-    months = loan.current_balance / principal_per_month
-    return int(months.to_integral_value()) + 1
+    return math.ceil(-math.log(1 - ratio) / math.log(1 + r))
 
 
 def rank_loans_by_avalanche(loans: list[Loan]) -> list[PayoffRecommendation]:

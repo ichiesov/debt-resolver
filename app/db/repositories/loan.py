@@ -27,6 +27,7 @@ class LoanRepository(BaseRepository):
             loan_type=LoanType(row["loan_type"]),
             is_active=row["is_active"],
             notes=row.get("notes"),
+            term_months=row.get("term_months"),
         )
 
     async def get_all_active(self) -> list[Loan]:
@@ -65,6 +66,7 @@ class LoanRepository(BaseRepository):
         loan_type: str,
         end_date: date | None = None,
         notes: str | None = None,
+        term_months: int | None = None,
     ) -> Loan:
         payload: dict[str, Any] = {
             "user_id": self._user_id,
@@ -78,6 +80,7 @@ class LoanRepository(BaseRepository):
             "loan_type": loan_type,
             "end_date": end_date.isoformat() if end_date else None,
             "notes": notes,
+            "term_months": term_months,
         }
         response = await self._client.table(_TABLE).insert(payload).execute()
         return self._row_to_model(response.data[0])

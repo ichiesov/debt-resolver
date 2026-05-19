@@ -4,7 +4,7 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
-from app.db.repositories import LoanRepository, LoanPaymentRepository
+from app.db.repositories import LoanPaymentRepository, LoanRepository
 from app.domain.exceptions import LoanNotFoundError
 from app.domain.models import Loan, LoanPayment
 
@@ -35,6 +35,7 @@ class LoanService:
         loan_type: str,
         end_date: date | None = None,
         notes: str | None = None,
+        term_months: int | None = None,
     ) -> Loan:
         return await self._loans.create(
             lender_name=lender_name,
@@ -47,6 +48,7 @@ class LoanService:
             loan_type=loan_type,
             end_date=end_date,
             notes=notes,
+            term_months=term_months,
         )
 
     async def record_payment(

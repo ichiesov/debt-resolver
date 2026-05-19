@@ -26,6 +26,7 @@ class AddLoanForm(StatesGroup):
     current_balance = State()
     interest_rate = State()
     monthly_payment = State()
+    term_months = State()
     payment_day = State()
     loan_type = State()
     confirm = State()
