@@ -39,6 +39,7 @@ class Loan:
     loan_type: LoanType
     is_active: bool
     notes: str | None
+    term_months: int | None = None
 
 
 @dataclass(frozen=True)

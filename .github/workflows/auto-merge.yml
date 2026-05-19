@@ -6,8 +6,10 @@ on:
 
 jobs:
   merge:
-    # Merge as soon as anyone approves — human can approve even after agent requested changes
-    if: github.event.review.state == 'approved'
+    # Merge only when a trusted collaborator approves (not external users)
+    if: |
+      github.event.review.state == 'approved' &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.review.author_association)
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -27,6 +27,7 @@ async def run_bot() -> None:
     )
     dp = Dispatcher(storage=MemoryStorage())
     dp.message.middleware(OwnerMiddleware())
+    dp.callback_query.middleware(OwnerMiddleware())
 
     client = await get_client()
     user_repo = UserRepository(client)

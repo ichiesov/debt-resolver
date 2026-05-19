@@ -12,6 +12,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from app.bot.keyboards.inline import confirm_cancel, loan_list
 from app.bot.states.forms import AddLoanForm
+from app.domain.optimization import _months_to_payoff
 from app.services.loan_service import LoanService
 
 router = Router()
@@ -43,17 +44,21 @@ async def cmd_loans(message: Message, loan_service: LoanService) -> None:
         await message.answer("У тебя нет активных кредитов. /add_loan — добавить кредит")
         return
 
-    sorted_loans = sorted(loans, key=lambda l: l.annual_interest_rate, reverse=True)
+    sorted_loans = sorted(loans, key=lambda loan: loan.annual_interest_rate, reverse=True)
     lines = ["💳 <b>Активные кредиты:</b>\n"]
     for loan in sorted_loans:
         pct = loan.annual_interest_rate * Decimal("100")
         balance_fmt = f"{loan.current_balance:,.0f}".replace(",", " ")
         payment_fmt = f"{loan.monthly_payment:,.0f}".replace(",", " ")
+        months_left = _months_to_payoff(loan)
+        term_str = f"{loan.term_months} мес." if loan.term_months else "—"
+        left_str = f"{months_left} мес." if months_left < 9999 else "∞"
         lines.append(
             f"🏦 <b>{loan.lender_name}</b>\n"
             f"  Остаток: {balance_fmt} ₽\n"
             f"  Платёж: {payment_fmt} ₽/мес ({pct:.2f}%)\n"
             f"  День платежа: {loan.payment_day}-е число\n"
+            f"  Срок: {term_str} · осталось ~{left_str}\n"
         )
     await message.answer("\n".join(lines), parse_mode="HTML")
 
@@ -69,7 +74,9 @@ async def cmd_pay_loan(message: Message, loan_service: LoanService) -> None:
 
 
 @router.callback_query(F.data.startswith("loan:"))
-async def pay_loan_selected(callback: CallbackQuery, state: FSMContext, loan_service: LoanService) -> None:
+async def pay_loan_selected(
+    callback: CallbackQuery, state: FSMContext, loan_service: LoanService
+) -> None:
     loan_id = uuid.UUID(callback.data.split(":")[1])
     loan = await loan_service.get_by_id(loan_id)
     payment_fmt = f"{loan.monthly_payment:,.0f}".replace(",", " ")
@@ -180,6 +187,20 @@ async def loan_got_payment(message: Message, state: FSMContext) -> None:
         await message.answer("❌ Введи корректную сумму платежа")
         return
     await state.update_data(monthly_payment=str(amount))
+    await state.set_state(AddLoanForm.term_months)
+    await message.answer("📆 Срок кредита (месяцев, например: 60):")
+
+
+@router.message(AddLoanForm.term_months)
+async def loan_got_term(message: Message, state: FSMContext) -> None:
+    try:
+        months = int((message.text or "0").strip())
+        if months <= 0:
+            raise ValueError
+    except ValueError:
+        await message.answer("❌ Введи целое число месяцев (например: 60)")
+        return
+    await state.update_data(term_months=months)
     await state.set_state(AddLoanForm.payment_day)
     await message.answer("📅 День платежа (число месяца, 1-31):")
 
@@ -205,6 +226,7 @@ async def loan_got_type(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(AddLoanForm.confirm)
     data = await state.get_data()
     pct = Decimal(data["interest_rate"]) * Decimal("100")
+    term = data.get("term_months")
     text = (
         f"✅ <b>Проверь данные:</b>\n\n"
         f"Кредитор: {data['lender_name']}\n"
@@ -213,6 +235,7 @@ async def loan_got_type(callback: CallbackQuery, state: FSMContext) -> None:
         f"Остаток: {Decimal(data['current_balance']):,.0f} ₽\n"
         f"Ставка: {pct:.2f}%\n"
         f"Платёж: {Decimal(data['monthly_payment']):,.0f} ₽/мес\n"
+        f"Срок: {term} мес.\n"
         f"День платежа: {data['payment_day']}-е число"
     )
     await callback.message.edit_text(
@@ -225,6 +248,7 @@ async def loan_confirmed(
     callback: CallbackQuery, state: FSMContext, loan_service: LoanService
 ) -> None:
     data = await state.get_data()
+    term = data.get("term_months")
     await loan_service.add_loan(
         lender_name=data["lender_name"],
         principal_amount=Decimal(data["principal"]),
@@ -234,6 +258,7 @@ async def loan_confirmed(
         payment_day=int(data["payment_day"]),
         start_date=date.today(),
         loan_type=data["loan_type"],
+        term_months=int(term) if term is not None else None,
     )
     await state.clear()
     await callback.message.edit_text(f"✅ Кредит «{data['lender_name']}» добавлен!")

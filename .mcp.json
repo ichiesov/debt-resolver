@@ -3,15 +3,6 @@
     "supabase": {
       "type": "http",
       "url": "https://mcp.supabase.com/mcp"
-    },
-    "obsidian-vault": {
-      "transport": {
-        "type": "http",
-        "url": "http://localhost:3001/mcp",
-        "headers": {
-          "Authorization": "Bearer GxmMrnFB9InoO7KWl86eAhbjaXC_fUuTWpXdHbmPtoU"
-        }
-      }
     }
   }
 }
