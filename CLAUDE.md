@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # debt-resolver — Claude Code Agent Guide
 
 ## Project Summary
@@ -18,7 +22,7 @@
 debt-resolver/
 ├── main.py                     # Entry point: asyncio.run(run_bot())
 ├── app/
-│   ├── domain/                 # Pure domain models (Pydantic), no I/O
+│   ├── domain/                 # Frozen dataclasses (models.py) + pure calc functions (balance.py, optimization.py), no I/O
 │   ├── db/
 │   │   ├── repositories/       # Async Supabase repository classes
 │   │   └── migrations/         # Raw SQL migration files (no __init__.py)
@@ -46,19 +50,56 @@ debt-resolver/
 | `services` | Business rules: validation, calculations, cross-repo orchestration |
 | `bot` | Telegram interaction only — delegates all logic to services |
 
+### Non-obvious architecture details
+
+**Service injection via Dispatcher data dict** — services are bound at startup in `app/bot/main.py`:
+```python
+dp["loan_service"] = LoanService(...)
+```
+Handlers declare them as typed parameters and aiogram resolves them automatically:
+```python
+async def cmd_loans(message: Message, loan_service: LoanService) -> None:
+```
+
+**Domain logic vs domain models** — `app/domain/models.py` holds frozen dataclasses; `app/domain/balance.py` and `app/domain/optimization.py` hold pure calculation functions that operate on those models. Both are I/O-free.
+
+**`UserRepository` has no `user_id` parameter** — unlike all other repositories whose constructor takes `(client, user_id)`, `UserRepository(client)` resolves the user_id internally via `get_or_create(telegram_id)`. The resolved `uuid.UUID` is then passed to every other repository.
+
+**FSM storage is in-memory** — `MemoryStorage()` means all conversation state is lost on bot restart. `Decimal` values cannot be stored in FSMContext directly; they are serialised to `str` via `str(amount)` and cast back with `Decimal(data["key"])` when retrieved.
+
+**Structured logging** — use `structlog` (already a dependency), not the stdlib `logging` module, for any new log statements.
+
 ---
 
-## How to Run
+## Common Commands
 
 ```bash
-# Install dependencies (uses uv lockfile)
+# Install dependencies
 uv sync
 
-# Copy and fill in environment variables
-cp .env.example .env
-
-# Start the bot
+# Run the bot
 uv run python main.py
+
+# Lint and format (run before every commit)
+uv run ruff check . && uv run ruff format .
+
+# Type-check
+uv run mypy .
+
+# Run all tests
+uv run pytest
+
+# Run a single test file
+uv run pytest tests/domain/test_balance.py -v
+
+# Run tests with coverage
+uv run pytest --cov=app --cov-report=term-missing
+
+# Apply SQL migrations
+uv run python scripts/migrate.py
+
+# Local Docker stack
+docker compose up --build
 ```
 
 ---
