@@ -6,8 +6,11 @@ on:
 
 jobs:
   apply:
-    # Run only when changes are explicitly requested (not on approve or plain comment)
-    if: github.event.review.state == 'changes_requested'
+    # Run only when changes are requested by a trusted collaborator on a same-repo branch (no forks)
+    if: |
+      github.event.review.state == 'changes_requested' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.review.author_association)
     runs-on: ubuntu-latest
     permissions:
       contents: write
