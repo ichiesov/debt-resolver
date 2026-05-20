@@ -62,9 +62,11 @@ class TransactionService:
         return await self._expense.get_by_date_range(from_date, to_date)
 
     async def delete_income(self, entry_id: uuid.UUID) -> None:
+        """Soft-delete: sets deleted_at, entry is excluded from all future queries."""
         await self._income.soft_delete(entry_id)
 
     async def delete_expense(self, entry_id: uuid.UUID) -> None:
+        """Soft-delete: sets deleted_at, entry is excluded from all future queries."""
         await self._expense.soft_delete(entry_id)
 
     async def add_borrowed(

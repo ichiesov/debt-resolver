@@ -42,6 +42,7 @@ async def cmd_add_income(message: Message, state: FSMContext) -> None:
 
 @router.message(AddIncomeForm.amount)
 async def income_got_amount(message: Message, state: FSMContext) -> None:
+    """Receive income amount and advance to AddIncomeForm.description."""
     try:
         amount = Decimal((message.text or "0").replace(" ", "").replace(",", "."))
         if amount <= 0:
@@ -56,42 +57,55 @@ async def income_got_amount(message: Message, state: FSMContext) -> None:
 
 @router.message(AddIncomeForm.description)
 async def income_got_description(message: Message, state: FSMContext) -> None:
+    """Receive free-text description and advance to AddIncomeForm.entry_date."""
     if not message.text:
         return
     await state.update_data(description=message.text.strip())
     await state.set_state(AddIncomeForm.entry_date)
     await message.answer(
-        "📅 Дата (сегодня/завтра, ДД.ММ или ДД.ММ.ГГГГ):\n"
-        "Или отправь «сегодня» для текущей даты."
+        "📅 Дата (сегодня/завтра, ДД.ММ или ДД.ММ.ГГГГ):\nИли отправь «сегодня» для текущей даты."
     )
 
 
 @router.message(AddIncomeForm.entry_date)
 async def income_got_date(message: Message, state: FSMContext) -> None:
+    """Parse natural-language date and advance to AddIncomeForm.is_recurring."""
     parsed = _parse_date(message.text or "")
     if parsed is None:
-        await message.answer("❌ Не удалось распознать дату. Попробуй: сегодня, 15.05 или 15.05.2025")
+        await message.answer(
+            "❌ Не удалось распознать дату. Попробуй: сегодня, 15.05 или 15.05.2025"
+        )
         return
     await state.update_data(entry_date=parsed.isoformat())
     await state.set_state(AddIncomeForm.is_recurring)
-    await message.answer("🔄 Это регулярный доход (повторяется каждый месяц)?", reply_markup=yes_no("inc_recurring_yes", "inc_recurring_no"))
+    await message.answer(
+        "🔄 Это регулярный доход (повторяется каждый месяц)?",
+        reply_markup=yes_no("inc_recurring_yes", "inc_recurring_no"),
+    )
 
 
 @router.callback_query(F.data == "inc_recurring_no", AddIncomeForm.is_recurring)
-async def income_not_recurring(callback: CallbackQuery, state: FSMContext, transaction_service: TransactionService) -> None:
+async def income_not_recurring(
+    callback: CallbackQuery, state: FSMContext, transaction_service: TransactionService
+) -> None:
+    """Skip recurrence_day step and save immediately with is_recurring=False."""
     await state.update_data(is_recurring=False, recurrence_day=None)
     await _save_income(callback.message, state, transaction_service, edit=True)
 
 
 @router.callback_query(F.data == "inc_recurring_yes", AddIncomeForm.is_recurring)
 async def income_is_recurring(callback: CallbackQuery, state: FSMContext) -> None:
+    """Mark income as recurring and advance to AddIncomeForm.recurrence_day."""
     await state.update_data(is_recurring=True)
     await state.set_state(AddIncomeForm.recurrence_day)
     await callback.message.edit_text("📅 В какой день месяца поступает этот доход? (1-31):")
 
 
 @router.message(AddIncomeForm.recurrence_day)
-async def income_got_recurrence_day(message: Message, state: FSMContext, transaction_service: TransactionService) -> None:
+async def income_got_recurrence_day(
+    message: Message, state: FSMContext, transaction_service: TransactionService
+) -> None:
+    """Receive day-of-month (1-31) and save recurring income; end of FSM flow."""
     try:
         day = int((message.text or "0").strip())
         if not 1 <= day <= 31:
@@ -103,7 +117,9 @@ async def income_got_recurrence_day(message: Message, state: FSMContext, transac
     await _save_income(message, state, transaction_service, edit=False)
 
 
-async def _save_income(message: Message, state: FSMContext, transaction_service: TransactionService, *, edit: bool) -> None:
+async def _save_income(
+    message: Message, state: FSMContext, transaction_service: TransactionService, *, edit: bool
+) -> None:
     data = await state.get_data()
     entry = await transaction_service.add_income(
         amount=Decimal(data["amount"]),
@@ -136,7 +152,9 @@ async def cmd_incomes(message: Message, transaction_service: TransactionService)
     for e in sorted(entries, key=lambda x: x.entry_date, reverse=True):
         amount_fmt = f"{e.amount:,.0f}".replace(",", " ")
         recurring = " 🔄" if e.is_recurring else ""
-        lines.append(f"{e.entry_date.strftime('%d.%m')}  {amount_fmt} ₽  {e.description}{recurring}")
+        lines.append(
+            f"{e.entry_date.strftime('%d.%m')}  {amount_fmt} ₽  {e.description}{recurring}"
+        )
         total += e.amount
     total_fmt = f"{total:,.0f}".replace(",", " ")
     lines.append(f"\n<b>Итого: {total_fmt} ₽</b>")

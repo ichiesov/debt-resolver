@@ -30,10 +30,13 @@ class PayLoanForm(StatesGroup):
 
 
 def _loan_type_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=label, callback_data=f"ltype:{key}")]
-        for key, label in LOAN_TYPES.items()
-    ] + [[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")]])
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=label, callback_data=f"ltype:{key}")]
+            for key, label in LOAN_TYPES.items()
+        ]
+        + [[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")]]
+    )
 
 
 @router.message(Command("loans"))
@@ -77,6 +80,7 @@ async def cmd_pay_loan(message: Message, loan_service: LoanService) -> None:
 async def pay_loan_selected(
     callback: CallbackQuery, state: FSMContext, loan_service: LoanService
 ) -> None:
+    """Store selected loan in FSM and advance to PayLoanForm.amount."""
     loan_id = uuid.UUID(callback.data.split(":")[1])
     loan = await loan_service.get_by_id(loan_id)
     payment_fmt = f"{loan.monthly_payment:,.0f}".replace(",", " ")
@@ -96,6 +100,7 @@ async def pay_loan_selected(
 
 @router.message(PayLoanForm.amount)
 async def pay_loan_amount(message: Message, state: FSMContext, loan_service: LoanService) -> None:
+    """Receive payment amount (0 = use default), call loan_service.record_payment, clear state."""
     try:
         raw = (message.text or "").replace(" ", "").replace(",", ".")
         amount_val = Decimal(raw)
@@ -128,6 +133,7 @@ async def cmd_add_loan(message: Message, state: FSMContext) -> None:
 
 @router.message(AddLoanForm.lender_name)
 async def loan_got_name(message: Message, state: FSMContext) -> None:
+    """Receive lender name and advance to AddLoanForm.principal."""
     if not message.text:
         return
     await state.update_data(lender_name=message.text.strip())
@@ -137,6 +143,7 @@ async def loan_got_name(message: Message, state: FSMContext) -> None:
 
 @router.message(AddLoanForm.principal)
 async def loan_got_principal(message: Message, state: FSMContext) -> None:
+    """Receive original loan amount (must be > 0) and advance to AddLoanForm.current_balance."""
     try:
         amount = Decimal((message.text or "0").replace(" ", "").replace(",", "."))
         if amount <= 0:
@@ -151,6 +158,7 @@ async def loan_got_principal(message: Message, state: FSMContext) -> None:
 
 @router.message(AddLoanForm.current_balance)
 async def loan_got_balance(message: Message, state: FSMContext) -> None:
+    """Receive current remaining balance and advance to AddLoanForm.interest_rate."""
     try:
         amount = Decimal((message.text or "0").replace(" ", "").replace(",", "."))
         if amount < 0:
@@ -165,6 +173,7 @@ async def loan_got_balance(message: Message, state: FSMContext) -> None:
 
 @router.message(AddLoanForm.interest_rate)
 async def loan_got_rate(message: Message, state: FSMContext) -> None:
+    """Receive annual rate % (0-100), store as fraction, advance to AddLoanForm.monthly_payment."""
     try:
         rate = Decimal((message.text or "0").replace(",", "."))
         if rate < 0 or rate > 100:
@@ -179,6 +188,7 @@ async def loan_got_rate(message: Message, state: FSMContext) -> None:
 
 @router.message(AddLoanForm.monthly_payment)
 async def loan_got_payment(message: Message, state: FSMContext) -> None:
+    """Receive monthly payment amount and advance to AddLoanForm.term_months."""
     try:
         amount = Decimal((message.text or "0").replace(" ", "").replace(",", "."))
         if amount <= 0:
@@ -193,6 +203,7 @@ async def loan_got_payment(message: Message, state: FSMContext) -> None:
 
 @router.message(AddLoanForm.term_months)
 async def loan_got_term(message: Message, state: FSMContext) -> None:
+    """Receive loan term in whole months and advance to AddLoanForm.payment_day."""
     try:
         months = int((message.text or "0").strip())
         if months <= 0:
@@ -207,6 +218,7 @@ async def loan_got_term(message: Message, state: FSMContext) -> None:
 
 @router.message(AddLoanForm.payment_day)
 async def loan_got_day(message: Message, state: FSMContext) -> None:
+    """Receive calendar day of monthly payment (1-31) and advance to AddLoanForm.loan_type."""
     try:
         day = int((message.text or "0").strip())
         if not 1 <= day <= 31:
@@ -221,6 +233,7 @@ async def loan_got_day(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(F.data.startswith("ltype:"), AddLoanForm.loan_type)
 async def loan_got_type(callback: CallbackQuery, state: FSMContext) -> None:
+    """Receive loan type via inline keyboard, show summary, advance to AddLoanForm.confirm."""
     loan_type = callback.data.split(":")[1]
     await state.update_data(loan_type=loan_type)
     await state.set_state(AddLoanForm.confirm)
@@ -247,6 +260,7 @@ async def loan_got_type(callback: CallbackQuery, state: FSMContext) -> None:
 async def loan_confirmed(
     callback: CallbackQuery, state: FSMContext, loan_service: LoanService
 ) -> None:
+    """Persist all collected FSM data via loan_service.add_loan and clear state."""
     data = await state.get_data()
     term = data.get("term_months")
     await loan_service.add_loan(

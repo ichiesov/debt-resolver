@@ -29,7 +29,7 @@ def _category_keyboard() -> InlineKeyboardMarkup:
     for i in range(0, len(CATEGORIES), 2):
         row = [
             InlineKeyboardButton(text=label, callback_data=f"cat:{key}")
-            for key, label in CATEGORIES[i:i + 2]
+            for key, label in CATEGORIES[i : i + 2]
         ]
         rows.append(row)
     rows.append([InlineKeyboardButton(text="❌ Отмена", callback_data="cancel")])
@@ -63,6 +63,7 @@ async def cmd_add_expense(message: Message, state: FSMContext) -> None:
 
 @router.message(AddExpenseForm.amount)
 async def expense_got_amount(message: Message, state: FSMContext) -> None:
+    """Receive expense amount and advance to AddExpenseForm.description."""
     try:
         amount = Decimal((message.text or "0").replace(" ", "").replace(",", "."))
         if amount <= 0:
@@ -77,6 +78,7 @@ async def expense_got_amount(message: Message, state: FSMContext) -> None:
 
 @router.message(AddExpenseForm.description)
 async def expense_got_description(message: Message, state: FSMContext) -> None:
+    """Receive free-text description and advance to AddExpenseForm.category."""
     if not message.text:
         return
     await state.update_data(description=message.text.strip())
@@ -86,41 +88,54 @@ async def expense_got_description(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(F.data.startswith("cat:"), AddExpenseForm.category)
 async def expense_got_category(callback: CallbackQuery, state: FSMContext) -> None:
+    """Receive category from inline keyboard and advance to AddExpenseForm.entry_date."""
     category = callback.data.split(":")[1]
     await state.update_data(category=category)
     await state.set_state(AddExpenseForm.entry_date)
     await callback.message.edit_text(
-        "📅 Дата (сегодня/завтра, ДД.ММ или ДД.ММ.ГГГГ):\n"
-        "Или отправь «сегодня» для текущей даты."
+        "📅 Дата (сегодня/завтра, ДД.ММ или ДД.ММ.ГГГГ):\nИли отправь «сегодня» для текущей даты."
     )
 
 
 @router.message(AddExpenseForm.entry_date)
 async def expense_got_date(message: Message, state: FSMContext) -> None:
+    """Parse natural-language date and advance to AddExpenseForm.is_recurring."""
     parsed = _parse_date(message.text or "")
     if parsed is None:
-        await message.answer("❌ Не удалось распознать дату. Попробуй: сегодня, 15.05 или 15.05.2025")
+        await message.answer(
+            "❌ Не удалось распознать дату. Попробуй: сегодня, 15.05 или 15.05.2025"
+        )
         return
     await state.update_data(entry_date=parsed.isoformat())
     await state.set_state(AddExpenseForm.is_recurring)
-    await message.answer("🔄 Это регулярный расход (повторяется каждый месяц)?", reply_markup=yes_no("exp_recurring_yes", "exp_recurring_no"))
+    await message.answer(
+        "🔄 Это регулярный расход (повторяется каждый месяц)?",
+        reply_markup=yes_no("exp_recurring_yes", "exp_recurring_no"),
+    )
 
 
 @router.callback_query(F.data == "exp_recurring_no", AddExpenseForm.is_recurring)
-async def expense_not_recurring(callback: CallbackQuery, state: FSMContext, transaction_service: TransactionService) -> None:
+async def expense_not_recurring(
+    callback: CallbackQuery, state: FSMContext, transaction_service: TransactionService
+) -> None:
+    """Skip recurrence_day step and save immediately with is_recurring=False."""
     await state.update_data(is_recurring=False, recurrence_day=None)
     await _save_expense(callback.message, state, transaction_service, edit=True)
 
 
 @router.callback_query(F.data == "exp_recurring_yes", AddExpenseForm.is_recurring)
 async def expense_is_recurring(callback: CallbackQuery, state: FSMContext) -> None:
+    """Mark expense as recurring and advance to AddExpenseForm.recurrence_day."""
     await state.update_data(is_recurring=True)
     await state.set_state(AddExpenseForm.recurrence_day)
     await callback.message.edit_text("📅 В какой день месяца происходит этот расход? (1-31):")
 
 
 @router.message(AddExpenseForm.recurrence_day)
-async def expense_got_recurrence_day(message: Message, state: FSMContext, transaction_service: TransactionService) -> None:
+async def expense_got_recurrence_day(
+    message: Message, state: FSMContext, transaction_service: TransactionService
+) -> None:
+    """Receive day-of-month (1-31) and save recurring expense; end of FSM flow."""
     try:
         day = int((message.text or "0").strip())
         if not 1 <= day <= 31:
@@ -132,7 +147,9 @@ async def expense_got_recurrence_day(message: Message, state: FSMContext, transa
     await _save_expense(message, state, transaction_service, edit=False)
 
 
-async def _save_expense(message: Message, state: FSMContext, transaction_service: TransactionService, *, edit: bool) -> None:
+async def _save_expense(
+    message: Message, state: FSMContext, transaction_service: TransactionService, *, edit: bool
+) -> None:
     data = await state.get_data()
     entry = await transaction_service.add_expense(
         amount=Decimal(data["amount"]),
@@ -164,7 +181,9 @@ async def cmd_expenses(message: Message, transaction_service: TransactionService
     for e in sorted(entries, key=lambda x: x.entry_date, reverse=True):
         amount_fmt = f"{e.amount:,.0f}".replace(",", " ")
         recurring = " 🔄" if e.is_recurring else ""
-        lines.append(f"{e.entry_date.strftime('%d.%m')}  {amount_fmt} ₽  {e.description}{recurring}")
+        lines.append(
+            f"{e.entry_date.strftime('%d.%m')}  {amount_fmt} ₽  {e.description}{recurring}"
+        )
         total += e.amount
     total_fmt = f"{total:,.0f}".replace(",", " ")
     lines.append(f"\n<b>Итого: {total_fmt} ₽</b>")

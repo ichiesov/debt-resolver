@@ -18,12 +18,14 @@ class PayoffRecommendation:
 
 
 def _monthly_interest(loan: Loan) -> Decimal:
+    """Monthly interest accrual in rubles, rounded to kopecks."""
     return (loan.current_balance * loan.annual_interest_rate / Decimal("12")).quantize(
         Decimal("0.01")
     )
 
 
 def _months_to_payoff(loan: Loan) -> int:
+    """Compound-interest annuity formula. Returns 9999 when payment ≤ monthly interest."""
     if loan.current_balance <= Decimal("0"):
         return 0
     r = float(loan.annual_interest_rate) / 12

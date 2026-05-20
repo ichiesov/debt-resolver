@@ -15,6 +15,7 @@ _REPAYMENTS_TABLE = "p2p_repayments"
 
 class BorrowedRepository(BaseRepository):
     async def _get_remaining(self, entry_id: uuid.UUID, original_amount: Decimal) -> Decimal:
+        # remaining_amount is not stored — always recomputed from p2p_repayments to stay accurate.
         response = (
             await self._client.table(_REPAYMENTS_TABLE)
             .select("amount")

@@ -35,6 +35,8 @@ class IncomeRepository(BaseRepository):
         return [self._row_to_model(r) for r in response.data]
 
     async def get_by_date_range(self, from_date: date, to_date: date) -> list[IncomeEntry]:
+        # Two queries: one-time entries filtered by date range; recurring entries filtered only by
+        # entry_date ≤ to_date — they must fire in any future month regardless of creation date.
         one_time_resp = (
             await self._client.table(_TABLE)
             .select("*")

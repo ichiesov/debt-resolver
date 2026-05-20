@@ -10,6 +10,8 @@ from app.config import settings
 
 
 class OwnerMiddleware(BaseMiddleware):
+    """Silently drops all updates from users other than TELEGRAM_OWNER_ID."""
+
     async def __call__(
         self,
         handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],

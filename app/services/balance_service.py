@@ -3,7 +3,12 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 
-from app.db.repositories import BorrowedRepository, ExpenseRepository, IncomeRepository, LoanRepository
+from app.db.repositories import (
+    BorrowedRepository,
+    ExpenseRepository,
+    IncomeRepository,
+    LoanRepository,
+)
 from app.domain.balance import calculate_balance_for_date, calculate_forecast
 from app.domain.models import DailyBalance
 
@@ -24,6 +29,7 @@ class BalanceService:
     async def get_balance_for_date(
         self, target_date: date, opening_balance: Decimal = Decimal("0")
     ) -> DailyBalance:
+        # Fetch 3 years of history so recurring entries created before target_date are included.
         from_date = date(target_date.year - 3, 1, 1)
 
         incomes = await self._income.get_by_date_range(from_date, target_date)

@@ -15,8 +15,7 @@ async def cmd_optimize(message: Message, optimization_service: OptimizationServi
     recs = await optimization_service.get_recommendations()
     if not recs:
         await message.answer(
-            "🎉 У тебя нет активных кредитов — поздравляю!\n"
-            "Добавь кредиты через /add_loan"
+            "🎉 У тебя нет активных кредитов — поздравляю!\nДобавь кредиты через /add_loan"
         )
         return
 

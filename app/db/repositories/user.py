@@ -9,6 +9,8 @@ _TABLE = "users"
 
 
 class UserRepository:
+    # Unlike all other repositories, UserRepository takes no user_id — it resolves it via
+    # get_or_create(telegram_id). The resolved UUID is then passed to every other repository.
     def __init__(self, client: AsyncClient) -> None:
         self._client = client
 

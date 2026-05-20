@@ -6,9 +6,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.domain.models import Direction
 from app.services.balance_service import BalanceService
 from tests.conftest import make_borrowed, make_expense, make_income, make_loan
-from app.domain.models import Direction
 
 
 @pytest.fixture

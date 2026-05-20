@@ -7,7 +7,6 @@ from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
-from app.bot.keyboards.reply import main_menu
 from app.domain.models import DailyBalance
 from app.services.balance_service import BalanceService
 
@@ -15,6 +14,7 @@ router = Router()
 
 
 def _fmt_amount(amount: Decimal) -> str:
+    # Comma separator → space: 15,000 → "15 000 ₽" (Russian locale convention)
     return f"{amount:,.0f} ₽".replace(",", " ")
 
 
@@ -70,7 +70,5 @@ async def cmd_forecast(message: Message, balance_service: BalanceService) -> Non
     lines = [f"📊 <b>Прогноз на {days} дней:</b>\n"]
     for daily in forecast:
         sign = "+" if daily.closing_balance >= Decimal("0") else ""
-        lines.append(
-            f"{daily.date.strftime('%d.%m')}  {sign}{_fmt_amount(daily.closing_balance)}"
-        )
+        lines.append(f"{daily.date.strftime('%d.%m')}  {sign}{_fmt_amount(daily.closing_balance)}")
     await message.answer("\n".join(lines), parse_mode="HTML")

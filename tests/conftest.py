@@ -4,8 +4,6 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
-import pytest
-
 from app.domain.models import (
     BorrowedEntry,
     Direction,

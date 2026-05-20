@@ -49,7 +49,9 @@ async def cmd_lent(message: Message, transaction_service: TransactionService) ->
     total = Decimal("0")
     for e in sorted(active, key=lambda x: x.transaction_date):
         amount_fmt = f"{e.remaining_amount:,.0f}".replace(",", " ")
-        due = f"  до {e.expected_return_date.strftime('%d.%m.%Y')}" if e.expected_return_date else ""
+        due = (
+            f"  до {e.expected_return_date.strftime('%d.%m.%Y')}" if e.expected_return_date else ""
+        )
         lines.append(f"👤 <b>{e.counterparty}</b>: {amount_fmt} ₽{due}")
         total += e.remaining_amount
     total_fmt = f"{total:,.0f}".replace(",", " ")
@@ -63,16 +65,16 @@ async def cmd_borrowed(message: Message, transaction_service: TransactionService
     active = [e for e in entries if not e.is_settled]
     if not active:
         await message.answer(
-            "У тебя нет активных долгов (я должен).\n"
-            "/add_debt — добавить долг\n"
-            "/lent — мне должны"
+            "У тебя нет активных долгов (я должен).\n/add_debt — добавить долг\n/lent — мне должны"
         )
         return
     lines = ["💸 <b>Я должен:</b>\n"]
     total = Decimal("0")
     for e in sorted(active, key=lambda x: x.transaction_date):
         amount_fmt = f"{e.remaining_amount:,.0f}".replace(",", " ")
-        due = f"  до {e.expected_return_date.strftime('%d.%m.%Y')}" if e.expected_return_date else ""
+        due = (
+            f"  до {e.expected_return_date.strftime('%d.%m.%Y')}" if e.expected_return_date else ""
+        )
         lines.append(f"👤 <b>{e.counterparty}</b>: {amount_fmt} ₽{due}")
         total += e.remaining_amount
     total_fmt = f"{total:,.0f}".replace(",", " ")
@@ -88,6 +90,7 @@ async def cmd_add_debt(message: Message, state: FSMContext) -> None:
 
 @router.callback_query(F.data.startswith("dir:"), AddBorrowedForm.direction)
 async def debt_got_direction(callback: CallbackQuery, state: FSMContext) -> None:
+    """Receive lent/borrowed direction and advance to AddBorrowedForm.counterparty."""
     direction = callback.data.split(":")[1]
     await state.update_data(direction=direction)
     await state.set_state(AddBorrowedForm.counterparty)
@@ -97,6 +100,7 @@ async def debt_got_direction(callback: CallbackQuery, state: FSMContext) -> None
 
 @router.message(AddBorrowedForm.counterparty)
 async def debt_got_counterparty(message: Message, state: FSMContext) -> None:
+    """Receive counterparty name and advance to AddBorrowedForm.amount."""
     if not message.text:
         return
     await state.update_data(counterparty=message.text.strip())
@@ -106,6 +110,7 @@ async def debt_got_counterparty(message: Message, state: FSMContext) -> None:
 
 @router.message(AddBorrowedForm.amount)
 async def debt_got_amount(message: Message, state: FSMContext) -> None:
+    """Receive debt amount and advance to AddBorrowedForm.transaction_date."""
     try:
         amount = Decimal((message.text or "0").replace(" ", "").replace(",", "."))
         if amount <= 0:
@@ -120,9 +125,12 @@ async def debt_got_amount(message: Message, state: FSMContext) -> None:
 
 @router.message(AddBorrowedForm.transaction_date)
 async def debt_got_transaction_date(message: Message, state: FSMContext) -> None:
+    """Parse transaction date and advance to AddBorrowedForm.expected_return_date."""
     parsed = _parse_date(message.text or "")
     if parsed is None:
-        await message.answer("❌ Не удалось распознать дату. Попробуй: сегодня, 15.05 или 15.05.2025")
+        await message.answer(
+            "❌ Не удалось распознать дату. Попробуй: сегодня, 15.05 или 15.05.2025"
+        )
         return
     await state.update_data(transaction_date=parsed.isoformat())
     await state.set_state(AddBorrowedForm.expected_return_date)
@@ -133,7 +141,10 @@ async def debt_got_transaction_date(message: Message, state: FSMContext) -> None
 
 
 @router.message(AddBorrowedForm.expected_return_date)
-async def debt_got_return_date(message: Message, state: FSMContext, transaction_service: TransactionService) -> None:
+async def debt_got_return_date(
+    message: Message, state: FSMContext, transaction_service: TransactionService
+) -> None:
+    """Receive optional return date (or "нет" to skip), persist debt, clear state."""
     text = (message.text or "").strip().lower()
     return_date: date | None = None
     if text not in ("нет", "no", "-"):

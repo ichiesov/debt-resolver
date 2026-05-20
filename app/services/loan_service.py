@@ -15,9 +15,11 @@ class LoanService:
         self._payments = payment_repo
 
     async def get_all_active(self) -> list[Loan]:
+        """Return all loans that are active and not soft-deleted."""
         return await self._loans.get_all_active()
 
     async def get_by_id(self, loan_id: uuid.UUID) -> Loan:
+        """Raise LoanNotFoundError if the loan does not exist or is soft-deleted."""
         loan = await self._loans.get_by_id(loan_id)
         if loan is None:
             raise LoanNotFoundError(f"Loan {loan_id} not found")
@@ -28,7 +30,7 @@ class LoanService:
         lender_name: str,
         principal_amount: Decimal,
         current_balance: Decimal,
-        annual_interest_rate: Decimal,
+        annual_interest_rate: Decimal,  # fraction, e.g. 0.1999 for 19.99%
         monthly_payment: Decimal,
         payment_day: int,
         start_date: date,
@@ -60,6 +62,10 @@ class LoanService:
         principal_part: Decimal | None = None,
         interest_part: Decimal | None = None,
     ) -> LoanPayment:
+        """Record a payment and update the loan balance. Auto-deactivates if balance reaches ₽0.
+
+        Balance reduction uses principal_part when provided; falls back to the full amount.
+        """
         loan = await self.get_by_id(loan_id)
         payment = await self._payments.create(
             loan_id=loan_id,
